@@ -1,57 +1,56 @@
-# register1.py
+# ------------------------------
+# File: register1.py
+# ------------------------------
 import zmq
-import threading
 
-VALID_NODE_ID = "N001"
 VALID_AI_ID = "AI001"
-registered_node = None
+VALID_APP_ID = "APP1"
+VALID_NODE_ID = "N001"
+
 registered_ai = None
-node_metrics = {}
+registered_app = None
+registered_node = None
+node_params = {}
 
-# Setup PUB socket to notify broker (inter_ai_broker.py)
-# context_pub = zmq.Context()
-# pub_socket = context_pub.socket(zmq.PUB)
-# pub_socket.bind("tcp://192.168.0.178:5562")  # <-- Added line
-
-
-def handle_node_registration():
-    global registered_node, node_metrics
+def start_register():
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://192.168.0.178:5558")
 
-    while True:
-        message = socket.recv_json()
-        print(f"[Register] Received node registration: {message}")
-        if message.get("node_id") == VALID_NODE_ID:
-            registered_node = VALID_NODE_ID
-            node_metrics = message.get("metrics", {})
-            socket.send_json({"status": "REGISTRATION_SUCCESS"})
-            print(f"[Register] Node {VALID_NODE_ID} registered with metrics: {node_metrics}")
-            # Notify broker about APP1 after successful node registration
-            # pub_socket.send_string("APP1")
-        else:
-            socket.send_json({"status": "REGISTRATION_FAILED"})
-            print("[Register] Invalid node ID!")
-
-def handle_ai_registration():
-    global registered_ai
-    context = zmq.Context()
-    socket = context.socket(zmq.REP)
-    socket.bind("tcp://192.168.0.178:5559")
+    print("[Register] Service started on tcp://192.168.0.178:5558")
 
     while True:
-        message = socket.recv_json()
-        print(f"[Register] Received AI registration: {message}")
-        if message.get("ai_id") == VALID_AI_ID and registered_node:
-            registered_ai = VALID_AI_ID
-            socket.send_json({"status": "AI_REGISTRATION_SUCCESS", "node_metrics": node_metrics})
-            print("[Register] AI registered and node is available.")
-        else:
-            socket.send_json({"status": "AI_REGISTRATION_FAILED"})
-            print("[Register] Invalid AI ID or node not present!")
+        msg = socket.recv_json()
+        print("[Register] Received:", msg)
+
+        if msg.get("type") == "AI_REGISTER":
+            ai_id = msg.get("ai_id")
+            if ai_id == VALID_AI_ID:
+                global registered_ai
+                registered_ai = ai_id
+                socket.send_json({"status": "AI_REGISTRATION_SUCCESS"})
+            else:
+                socket.send_json({"status": "AI_REGISTRATION_FAILED"})
+
+        elif msg.get("type") == "APP_REGISTER":
+            app_id = msg.get("app_id")
+            if app_id == VALID_APP_ID:
+                global registered_app
+                registered_app = app_id
+                socket.send_json({"status": "APP_REGISTRATION_SUCCESS"})
+            else:
+                socket.send_json({"status": "APP_REGISTRATION_FAILED"})
+
+        elif msg.get("type") == "NODE_REGISTER":
+            node_id = msg.get("node_id")
+            if node_id == VALID_NODE_ID:
+                global registered_node, node_params
+                registered_node = node_id
+                node_params = msg.get("params", {})
+                socket.send_json({"status": "NODE_REGISTRATION_SUCCESS"})
+                print(f"[Register] Node registered: {node_id} with params {node_params}")
+            else:
+                socket.send_json({"status": "NODE_REGISTRATION_FAILED"})
 
 if __name__ == "__main__":
-    print("[Register] Register service started.")
-    threading.Thread(target=handle_node_registration).start()
-    threading.Thread(target=handle_ai_registration).start()
+    start_register()
